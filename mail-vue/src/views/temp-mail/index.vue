@@ -291,7 +291,7 @@ import {Icon} from '@iconify/vue'
 import {computed, nextTick, onActivated, onDeactivated, onMounted, onBeforeUnmount, reactive, ref, watch} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useRoute} from 'vue-router'
-import {accountAdd, accountListByPage} from '@/request/account.js'
+import {accountAdd, accountList, accountListByPage} from '@/request/account.js'
 import {emailList, emailLatest, emailRead} from '@/request/email.js'
 import {useSettingStore} from '@/store/setting.js'
 import {useAccountStore} from '@/store/account.js'
@@ -399,7 +399,21 @@ function selectAccount(account) {
   syncAccountStore(account)
 }
 
+function normalizeAccountPage(data) {
+  if (Array.isArray(data)) {
+    return {list: data, total: data.length}
+  }
+  if (data && Array.isArray(data.list)) {
+    return {list: data.list, total: Number(data.total) || data.list.length}
+  }
+  return {list: [], total: 0}
+}
+
 async function loadAccounts(page = historyPage.value) {
+  // el-pagination 可能传入数字；兜底非法值
+  page = Number(page) || 1
+  if (page < 1) page = 1
+
   if (!hasPerm('account:query')) {
     accounts.splice(0, accounts.length)
     accountTotal.value = 0
@@ -410,24 +424,52 @@ async function loadAccounts(page = historyPage.value) {
   historyPage.value = page
 
   try {
-    const data = await accountListByPage(page, pageSize)
-    const list = Array.isArray(data) ? data : (data?.list || [])
-    const total = Array.isArray(data) ? list.length : (data?.total || 0)
+    let {list, total} = normalizeAccountPage(await accountListByPage(page, pageSize))
+
+    // 分页接口异常/旧后端未部署时，回退到已验证可用的游标接口
+    if (page === 1 && list.length === 0) {
+      const fallback = await accountList(0, pageSize, null)
+      if (Array.isArray(fallback) && fallback.length > 0) {
+        list = fallback
+        // 游标接口无 total：满页则至少还有下一页
+        total = fallback.length === pageSize ? pageSize + 1 : fallback.length
+      }
+    }
 
     accounts.splice(0, accounts.length, ...list)
     accountTotal.value = total
 
     if (list.length > 0) {
       const stillSelected = list.find(item => item.accountId === currentAccount.value?.accountId)
-      selectAccount(stillSelected || list[0])
+      if (stillSelected) {
+        selectAccount(stillSelected)
+      } else if (!currentAccount.value) {
+        // 首次进入无选中时默认第一条
+        selectAccount(list[0])
+      }
+      // 若当前选中不在本页（例如刚生成），保留 currentAccount，由调用方处理
     } else if (page > 1 && total > 0) {
-      // 当前页为空时回退到最后一页
       const lastPage = Math.max(1, Math.ceil(total / pageSize))
       if (lastPage !== page) {
         await loadAccounts(lastPage)
       }
-    } else {
-      currentAccount.value = null
+    }
+  } catch (e) {
+    console.error(e)
+    // 分页失败时尝试游标接口，避免整页空白
+    if (page === 1) {
+      try {
+        const fallback = await accountList(0, pageSize, null)
+        if (Array.isArray(fallback)) {
+          accounts.splice(0, accounts.length, ...fallback)
+          accountTotal.value = fallback.length === pageSize ? pageSize + 1 : fallback.length
+          if (fallback.length > 0 && !currentAccount.value) {
+            selectAccount(fallback[0])
+          }
+        }
+      } catch (err) {
+        console.error(err)
+      }
     }
   } finally {
     accountLoading.value = false
@@ -435,14 +477,38 @@ async function loadAccounts(page = historyPage.value) {
 }
 
 async function prependAccount(account) {
-  // 新邮箱始终回到第一页并选中
-  historyPage.value = 1
-  await loadAccounts(1)
+  // 生成成功后立刻展示当前邮箱，不依赖列表刷新结果
   selectAccount(account)
-  // 若接口尚未包含刚创建的邮箱，本地插入顶部
-  if (!accounts.some(item => item.accountId === account.accountId)) {
-    accounts.unshift(account)
-    accountTotal.value += 1
+
+  const existIndex = accounts.findIndex(item => item.accountId === account.accountId)
+  if (existIndex >= 0) {
+    accounts.splice(existIndex, 1)
+  }
+  accounts.unshift(account)
+  if (historyPage.value !== 1) {
+    // 非首页时先切回第一页视觉（本地插入）
+    historyPage.value = 1
+  }
+  // 保证当前页最多 pageSize 条
+  if (accounts.length > pageSize) {
+    accounts.splice(pageSize)
+  }
+  accountTotal.value = Math.max(accountTotal.value + 1, accounts.length)
+
+  // 后台对齐服务端分页数据
+  try {
+    await loadAccounts(1)
+    if (!accounts.some(item => item.accountId === account.accountId)) {
+      accounts.unshift(account)
+      if (accounts.length > pageSize) {
+        accounts.splice(pageSize)
+      }
+      accountTotal.value = Math.max(accountTotal.value, accounts.length)
+    }
+    selectAccount(account)
+  } catch (e) {
+    console.error(e)
+    selectAccount(account)
   }
 }
 
