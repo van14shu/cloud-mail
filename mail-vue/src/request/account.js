@@ -4,6 +4,10 @@ export function accountList(accountId, size, lastSort) {
     return http.get('/account/list', {params: {accountId, size, lastSort}});
 }
 
+export function accountListByPage(page, size = 10) {
+    return http.get('/account/list', {params: {page, size}});
+}
+
 export function accountAdd(email,token) {
     return http.post('/account/add', {email,token})
 }

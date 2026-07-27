@@ -357,6 +357,8 @@ const zh = {
     selectDomainFirst: '请先选择邮箱后缀',
     addAccountDisabled: '当前不允许添加邮箱',
     content: '内容',
-    loadMore: '加载更多'
+    loadMore: '加载更多',
+    clickToCopy: '点击复制',
+    emailDetail: '邮件详情'
 }
 export default zh

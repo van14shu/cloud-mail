@@ -357,7 +357,9 @@ const en = {
     selectDomainFirst: 'Please select a domain first',
     addAccountDisabled: 'Adding mailboxes is currently disabled',
     content: 'Content',
-    loadMore: 'Load more'
+    loadMore: 'Load more',
+    clickToCopy: 'Click to copy',
+    emailDetail: 'Email Detail'
 }
 
 export default en

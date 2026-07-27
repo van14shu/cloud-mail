@@ -116,15 +116,43 @@ const accountService = {
 
 	list(c, params, userId) {
 
-		let { accountId, size, lastSort } = params;
+		let { accountId, size, lastSort, page } = params;
 
-		accountId = Number(accountId);
 		size = Number(size);
-		lastSort = Number(lastSort);
-
 		if (size > 30) {
 			size = 30;
 		}
+
+		// 分页模式：供临时邮箱历史列表使用，返回 { list, total }
+		if (page !== undefined && page !== null && page !== '') {
+			page = Number(page) || 1;
+			if (page < 1) page = 1;
+			if (!size || Number.isNaN(size)) size = 10;
+
+			const offset = (page - 1) * size;
+			const list = orm(c).select().from(account).where(
+				and(
+					eq(account.userId, userId),
+					eq(account.isDel, isDel.NORMAL)
+				)
+			)
+				.orderBy(desc(account.sort), asc(account.accountId))
+				.limit(size)
+				.offset(offset)
+				.all();
+
+			const totalRow = orm(c).select({ total: count() }).from(account).where(
+				and(
+					eq(account.userId, userId),
+					eq(account.isDel, isDel.NORMAL)
+				)
+			).get();
+
+			return { list, total: totalRow?.total || 0, page, size };
+		}
+
+		accountId = Number(accountId);
+		lastSort = Number(lastSort);
 
 		if (!accountId) {
 			accountId = 0;

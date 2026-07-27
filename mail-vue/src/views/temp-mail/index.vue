@@ -1,57 +1,49 @@
 <template>
   <div class="temp-mail-page">
-    <!-- 移动端：打开历史列表 -->
     <div class="mobile-history-toggle" @click="historyDrawer = true">
       <Icon icon="solar:history-bold-duotone" width="18" height="18"/>
       <span>{{ $t('historyMailbox') }}</span>
-      <span class="count-tag">{{ accounts.length }}</span>
+      <span class="count-tag">{{ accountTotal }}</span>
     </div>
 
     <div class="temp-mail-body">
-      <!-- 左侧历史邮箱 -->
+      <!-- 左侧历史邮箱（分页） -->
       <aside class="history-panel desktop-history">
         <div class="history-header">
           <div class="history-title">
             <Icon icon="solar:history-bold-duotone" width="20" height="20"/>
             <span>{{ $t('historyMailbox') }}</span>
           </div>
-          <span class="history-count">{{ accounts.length }} {{ $t('mailboxUnit') }}</span>
+          <span class="history-count">{{ accountTotal }} {{ $t('mailboxUnit') }}</span>
         </div>
 
-        <el-scrollbar class="history-scroll" ref="historyScrollRef">
+        <div class="history-list" v-loading="accountLoading">
           <div
-              v-infinite-scroll="loadAccounts"
-              :infinite-scroll-distance="200"
-              :infinite-scroll-immediate="false"
-              :infinite-scroll-disabled="accountLoading || accountFollowLoading || accountNoMore"
+              v-for="item in accounts"
+              :key="item.accountId"
+              class="history-item"
+              :class="{ active: currentAccount?.accountId === item.accountId }"
+              @click="selectAccount(item)"
           >
-            <div
-                v-for="item in accounts"
-                :key="item.accountId"
-                class="history-item"
-                :class="{ active: currentAccount?.accountId === item.accountId }"
-                @click="selectAccount(item)"
-            >
-              <div class="history-email" :title="item.email">{{ item.email }}</div>
-              <div class="history-time">{{ formatAccountTime(item.createTime) }}</div>
-            </div>
-
-            <template v-if="accountLoading">
-              <el-skeleton v-for="i in 6" :key="'sk-' + i" animated class="history-skeleton">
-                <template #template>
-                  <el-skeleton-item variant="p" style="width: 80%; height: 16px; margin-bottom: 8px"/>
-                  <el-skeleton-item variant="text" style="width: 50%; height: 12px"/>
-                </template>
-              </el-skeleton>
-            </template>
-
-            <div v-if="accountNoMore && accounts.length > 0" class="history-end">{{ $t('noMoreData') }}</div>
-            <el-empty v-if="accountNoMore && accounts.length === 0" :description="$t('noMailboxYet')"/>
+            <div class="history-email" :title="item.email">{{ item.email }}</div>
+            <div class="history-time">{{ formatAccountTime(item.createTime) }}</div>
           </div>
-        </el-scrollbar>
+          <el-empty v-if="!accountLoading && accounts.length === 0" :description="$t('noMailboxYet')"/>
+        </div>
+
+        <div class="history-pagination" v-if="accountTotal > pageSize">
+          <el-pagination
+              v-model:current-page="historyPage"
+              :page-size="pageSize"
+              :total="accountTotal"
+              layout="prev, pager, next"
+              small
+              background
+              @current-change="loadAccounts"
+          />
+        </div>
       </aside>
 
-      <!-- 右侧主区域 -->
       <section class="main-panel">
         <!-- 生成区 -->
         <div class="generate-card">
@@ -70,14 +62,14 @@
                 {{ currentEmail || $t('noCurrentMailbox') }}
               </div>
               <div class="action-row">
-                <el-button class="copy-btn" @click="copyCurrentEmail" :disabled="!currentEmail">
-                  <Icon icon="solar:copy-bold-duotone" width="16" height="16" style="margin-right: 6px"/>
-                  {{ $t('copyMailbox') }}
-                </el-button>
-                <el-button type="primary" class="refresh-btn" @click="refreshEmails" :loading="emailRefreshing" :disabled="!currentAccount?.accountId">
-                  <Icon icon="ion:reload" width="16" height="16" style="margin-right: 6px"/>
-                  {{ $t('refreshMail') }}
-                </el-button>
+                <button class="pill-btn outline" type="button" :disabled="!currentEmail" @click="copyCurrentEmail">
+                  <Icon icon="solar:copy-bold-duotone" width="18" height="18"/>
+                  <span>{{ $t('copyMailbox') }}</span>
+                </button>
+                <button class="pill-btn primary" type="button" :disabled="!currentAccount?.accountId || emailRefreshing" @click="refreshEmails">
+                  <Icon icon="ion:reload" width="18" height="18" :class="{ spinning: emailRefreshing }"/>
+                  <span>{{ $t('refreshMail') }}</span>
+                </button>
               </div>
             </div>
 
@@ -92,7 +84,7 @@
                   <Icon icon="mdi:web" width="14" height="14"/>
                   <span>{{ $t('emailSuffix') }}</span>
                 </div>
-                <el-select v-model="selectedSuffix" class="suffix-select" :placeholder="$t('select')">
+                <el-select v-model="selectedSuffix" class="suffix-select" size="large" :placeholder="$t('select')">
                   <el-option v-for="item in domainList" :key="item" :label="item" :value="item"/>
                 </el-select>
               </div>
@@ -108,24 +100,27 @@
 
               <template v-if="!isCustomMode">
                 <div class="gen-btn-row">
-                  <el-button class="random-btn" :loading="generating === 'random'" :disabled="!canGenerate" @click="generateAndAdd('random')">
-                    <Icon icon="mdi:dice-5-outline" width="16" height="16" style="margin-right: 6px"/>
-                    {{ $t('randomGenerate') }}
-                  </el-button>
-                  <el-button type="primary" class="name-btn" :loading="generating === 'name'" :disabled="!canGenerate" @click="generateAndAdd('name')">
-                    <Icon icon="mdi:account-outline" width="16" height="16" style="margin-right: 6px"/>
-                    {{ $t('randomName') }}
-                  </el-button>
+                  <button class="pill-btn outline" type="button" :disabled="!canGenerate || !!generating" @click="generateAndAdd('random')">
+                    <Icon v-if="generating === 'random'" icon="line-md:loading-twotone-loop" width="18" height="18"/>
+                    <Icon v-else icon="mdi:dice-5-outline" width="18" height="18"/>
+                    <span>{{ $t('randomGenerate') }}</span>
+                  </button>
+                  <button class="pill-btn primary" type="button" :disabled="!canGenerate || !!generating" @click="generateAndAdd('name')">
+                    <Icon v-if="generating === 'name'" icon="line-md:loading-twotone-loop" width="18" height="18"/>
+                    <Icon v-else icon="mdi:account-outline" width="18" height="18"/>
+                    <span>{{ $t('randomName') }}</span>
+                  </button>
                 </div>
-                <el-button class="switch-mode-btn" text @click="isCustomMode = true">
+                <button class="pill-btn ghost" type="button" @click="isCustomMode = true">
                   {{ $t('switchCustom') }}
-                </el-button>
+                </button>
               </template>
 
               <template v-else>
                 <div class="custom-row">
                   <el-input
                       v-model="customPrefix"
+                      size="large"
                       :placeholder="$t('emailAccount')"
                       clearable
                       @keyup.enter="generateAndAdd('custom')"
@@ -136,10 +131,13 @@
                   </el-input>
                 </div>
                 <div class="gen-btn-row">
-                  <el-button type="primary" :loading="generating === 'custom'" :disabled="!canGenerate" @click="generateAndAdd('custom')">
-                    {{ $t('add') }}
-                  </el-button>
-                  <el-button @click="isCustomMode = false">{{ $t('switchRandom') }}</el-button>
+                  <button class="pill-btn primary" type="button" :disabled="!canGenerate || !!generating" @click="generateAndAdd('custom')">
+                    <Icon v-if="generating === 'custom'" icon="line-md:loading-twotone-loop" width="18" height="18"/>
+                    <span>{{ $t('add') }}</span>
+                  </button>
+                  <button class="pill-btn outline" type="button" @click="isCustomMode = false">
+                    {{ $t('switchRandom') }}
+                  </button>
                 </div>
               </template>
 
@@ -208,16 +206,16 @@
     </div>
 
     <!-- 移动端历史抽屉 -->
-    <el-drawer v-model="historyDrawer" direction="ltr" size="280px" :with-header="false" class="history-drawer">
+    <el-drawer v-model="historyDrawer" direction="ltr" size="300px" :with-header="false">
       <div class="history-panel drawer-history">
         <div class="history-header">
           <div class="history-title">
             <Icon icon="solar:history-bold-duotone" width="20" height="20"/>
             <span>{{ $t('historyMailbox') }}</span>
           </div>
-          <span class="history-count">{{ accounts.length }} {{ $t('mailboxUnit') }}</span>
+          <span class="history-count">{{ accountTotal }} {{ $t('mailboxUnit') }}</span>
         </div>
-        <el-scrollbar class="history-scroll">
+        <div class="history-list" v-loading="accountLoading">
           <div
               v-for="item in accounts"
               :key="'m-' + item.accountId"
@@ -228,9 +226,63 @@
             <div class="history-email" :title="item.email">{{ item.email }}</div>
             <div class="history-time">{{ formatAccountTime(item.createTime) }}</div>
           </div>
-        </el-scrollbar>
+        </div>
+        <div class="history-pagination" v-if="accountTotal > pageSize">
+          <el-pagination
+              v-model:current-page="historyPage"
+              :page-size="pageSize"
+              :total="accountTotal"
+              layout="prev, pager, next"
+              small
+              background
+              @current-change="loadAccounts"
+          />
+        </div>
       </div>
     </el-drawer>
+
+    <!-- 邮件详情浮层 -->
+    <el-dialog
+        v-model="detailVisible"
+        class="email-detail-dialog"
+        width="min(860px, 94vw)"
+        top="6vh"
+        append-to-body
+        destroy-on-close
+        :show-close="false"
+        :close-on-click-modal="true"
+    >
+      <template #header>
+        <div class="detail-header">
+          <div class="detail-title">
+            <Icon icon="fluent-color:mail-16" width="20" height="20"/>
+            <span :title="detailEmail?.subject">{{ detailEmail?.subject || $t('emailDetail') }}</span>
+          </div>
+          <button class="detail-close" type="button" @click="detailVisible = false" aria-label="close">
+            <Icon icon="mdi:close" width="22" height="22"/>
+          </button>
+        </div>
+      </template>
+
+      <div class="detail-body" v-if="detailEmail">
+        <div v-if="detailEmail.code" class="code-banner" @click="copyText(detailEmail.code)">
+          <Icon icon="mdi:key-variant" width="18" height="18" color="#e6a23c"/>
+          <span class="code-value">{{ detailEmail.code }}</span>
+          <span class="code-tip">{{ $t('clickToCopy') }}</span>
+        </div>
+
+        <div class="detail-meta">
+          <div><span class="meta-k">{{ $t('sender') }}</span>{{ detailEmail.name || detailEmail.sendEmail }}</div>
+          <div><span class="meta-k">{{ $t('subject') }}</span>{{ detailEmail.subject || '-' }}</div>
+          <div><span class="meta-k">{{ $t('date') }}</span>{{ formatDetailDate(detailEmail.createTime) }}</div>
+        </div>
+
+        <el-scrollbar class="detail-content-scroll">
+          <ShadowHtml v-if="detailEmail.content" class="detail-html" :html="formatImage(detailEmail.content)"/>
+          <pre v-else class="detail-text">{{ detailEmail.text || '' }}</pre>
+        </el-scrollbar>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -238,28 +290,31 @@
 import {Icon} from '@iconify/vue'
 import {computed, nextTick, onActivated, onDeactivated, onMounted, onBeforeUnmount, reactive, ref, watch} from 'vue'
 import {useI18n} from 'vue-i18n'
-import {useRoute, useRouter} from 'vue-router'
-import {accountAdd, accountList} from '@/request/account.js'
+import {useRoute} from 'vue-router'
+import {accountAdd, accountListByPage} from '@/request/account.js'
 import {emailList, emailLatest, emailRead} from '@/request/email.js'
 import {useSettingStore} from '@/store/setting.js'
 import {useAccountStore} from '@/store/account.js'
-import {useEmailStore} from '@/store/email.js'
 import {useUserStore} from '@/store/user.js'
 import {hasPerm} from '@/perm/perm.js'
 import {isEmail} from '@/utils/verify-utils.js'
 import {generateNameLocalPart, generateRandomLocalPart} from '@/utils/email-gen.js'
-import {fromNow, tzDayjs} from '@/utils/day.js'
+import {formatDetailDate, fromNow, tzDayjs} from '@/utils/day.js'
 import {sleep} from '@/utils/time-utils.js'
+import {toOssDomain} from '@/utils/convert.js'
+import ShadowHtml from '@/components/shadow-html/index.vue'
 
 defineOptions({name: 'temp-mail'})
 
 const {t} = useI18n()
 const route = useRoute()
-const router = useRouter()
 const settingStore = useSettingStore()
 const accountStore = useAccountStore()
-const emailStore = useEmailStore()
 const userStore = useUserStore()
+
+const pageSize = 10
+const historyPage = ref(1)
+const accountTotal = ref(0)
 
 const domainList = computed(() => settingStore.domainList || [])
 const minLength = computed(() => {
@@ -270,9 +325,6 @@ const minLength = computed(() => {
 const accounts = reactive([])
 const currentAccount = ref(null)
 const accountLoading = ref(false)
-const accountFollowLoading = ref(false)
-const accountNoMore = ref(false)
-const historyScrollRef = ref(null)
 const historyDrawer = ref(false)
 
 const selectedSuffix = ref('')
@@ -298,6 +350,9 @@ let latestPollTimer = null
 let latestEmailId = 0
 const existEmailIds = new Set()
 let pageActive = true
+
+const detailVisible = ref(false)
+const detailEmail = ref(null)
 
 const currentEmail = computed(() => currentAccount.value?.email || '')
 const autoRefreshEnabled = computed(() => Number(settingStore.settings.autoRefresh) > 1)
@@ -326,6 +381,12 @@ function formatAccountTime(time) {
   return tzDayjs(time).format('YYYY/M/D HH:mm:ss')
 }
 
+function formatImage(content) {
+  content = content || ''
+  const domain = settingStore.settings.r2Domain
+  return content.replace(/{{domain}}/g, toOssDomain(domain) + '/')
+}
+
 function syncAccountStore(account) {
   if (!account) return
   accountStore.currentAccountId = account.accountId
@@ -334,63 +395,70 @@ function syncAccountStore(account) {
 
 function selectAccount(account) {
   if (!account) return
-  const isSame = currentAccount.value?.accountId === account.accountId
   currentAccount.value = account
   syncAccountStore(account)
-  // 账号变化时由 watch 触发 loadEmails；手动刷新走 refreshEmails
-  if (isSame) return
 }
 
-async function loadAccounts() {
-  if (accountLoading.value || accountFollowLoading.value || accountNoMore.value) return
+async function loadAccounts(page = historyPage.value) {
   if (!hasPerm('account:query')) {
-    accountNoMore.value = true
+    accounts.splice(0, accounts.length)
+    accountTotal.value = 0
     return
   }
 
-  if (accounts.length === 0) {
-    accountLoading.value = true
-  } else {
-    accountFollowLoading.value = true
-  }
-
-  const accountId = accounts.length > 0 ? accounts.at(-1).accountId : 0
-  const lastSort = accounts.length > 0 ? accounts.at(-1).sort : null
-  const size = 30
+  accountLoading.value = true
+  historyPage.value = page
 
   try {
-    const list = await accountList(accountId, size, lastSort)
-    if (list.length < size) {
-      accountNoMore.value = true
+    const data = await accountListByPage(page, pageSize)
+    const list = Array.isArray(data) ? data : (data?.list || [])
+    const total = Array.isArray(data) ? list.length : (data?.total || 0)
+
+    accounts.splice(0, accounts.length, ...list)
+    accountTotal.value = total
+
+    if (list.length > 0) {
+      const stillSelected = list.find(item => item.accountId === currentAccount.value?.accountId)
+      selectAccount(stillSelected || list[0])
+    } else if (page > 1 && total > 0) {
+      // 当前页为空时回退到最后一页
+      const lastPage = Math.max(1, Math.ceil(total / pageSize))
+      if (lastPage !== page) {
+        await loadAccounts(lastPage)
+      }
+    } else {
+      currentAccount.value = null
     }
-    if (accounts.length === 0 && list.length > 0) {
-      selectAccount(list[0])
-    }
-    accounts.push(...list)
   } finally {
     accountLoading.value = false
-    accountFollowLoading.value = false
   }
 }
 
-function prependAccount(account) {
-  const existsIndex = accounts.findIndex(item => item.accountId === account.accountId)
-  if (existsIndex >= 0) {
-    accounts.splice(existsIndex, 1)
-  }
-  accounts.unshift(account)
+async function prependAccount(account) {
+  // 新邮箱始终回到第一页并选中
+  historyPage.value = 1
+  await loadAccounts(1)
   selectAccount(account)
+  // 若接口尚未包含刚创建的邮箱，本地插入顶部
+  if (!accounts.some(item => item.accountId === account.accountId)) {
+    accounts.unshift(account)
+    accountTotal.value += 1
+  }
 }
 
-async function copyCurrentEmail() {
-  if (!currentEmail.value) return
+async function copyText(text) {
+  if (!text) return
   try {
-    await navigator.clipboard.writeText(currentEmail.value)
+    await navigator.clipboard.writeText(text)
     ElMessage({message: t('copySuccessMsg'), type: 'success', plain: true})
   } catch (e) {
     console.error(e)
     ElMessage({message: t('copyFailMsg'), type: 'error', plain: true})
   }
+}
+
+async function copyCurrentEmail() {
+  await copyText(currentEmail.value)
 }
 
 function buildLocalPart(type) {
@@ -492,7 +560,7 @@ async function generateAndAdd(type, retryCount = 0) {
     if (account.addVerifyOpen !== undefined) {
       settingStore.settings.addVerifyOpen = account.addVerifyOpen
     }
-    prependAccount(account)
+    await prependAccount(account)
     if (type === 'custom') {
       customPrefix.value = ''
     }
@@ -502,7 +570,6 @@ async function generateAndAdd(type, retryCount = 0) {
     if (res?.code === 400) {
       resetTurnstile()
     }
-    // 邮箱已占用时，随机模式自动重试
     const msg = res?.message || ''
     const isConflict = res?.code === 409 || /exist|已|占用|注册|存在/i.test(msg)
     if (isConflict && type !== 'custom' && retryCount < 3) {
@@ -581,7 +648,6 @@ async function loadEmails(reset = false) {
   }
 
   const accountId = currentAccount.value.accountId
-  // 临时邮箱页始终只看当前地址，不混入「全部收取」
   const allReceive = 0
   const emailId = reset || emails.length === 0 ? 0 : emails.at(-1).emailId
   const size = 20
@@ -624,12 +690,8 @@ function openEmail(email) {
       email.unread = 0
     })
   }
-  emailStore.contentData.email = email
-  emailStore.contentData.delType = 'logic'
-  emailStore.contentData.showUnread = true
-  emailStore.contentData.showStar = true
-  emailStore.contentData.showReply = true
-  router.push('/message')
+  detailEmail.value = email
+  detailVisible.value = true
 }
 
 function resetCountdown() {
@@ -665,11 +727,7 @@ function startAutoRefresh() {
     const waitMs = interval > 1 ? interval * 1000 : 3000
     await sleep(waitMs)
 
-    if (!pageActive) {
-      latestPollTimer = setTimeout(loop, 0)
-      return
-    }
-    if (route.name !== 'temp-mail') {
+    if (!pageActive || route.name !== 'temp-mail') {
       latestPollTimer = setTimeout(loop, 0)
       return
     }
@@ -677,8 +735,7 @@ function startAutoRefresh() {
     try {
       if (autoRefreshEnabled.value && currentAccount.value?.accountId && latestEmailId) {
         const accountId = currentAccount.value.accountId
-        const allReceive = 0
-        const list = await emailLatest(latestEmailId, accountId, allReceive)
+        const list = await emailLatest(latestEmailId, accountId, 0)
         if (accountId === currentAccount.value?.accountId && Array.isArray(list) && list.length > 0) {
           for (const raw of list) {
             if (!existEmailIds.has(raw.emailId)) {
@@ -713,7 +770,7 @@ onMounted(() => {
   if (usernameLength.value < minLength.value) {
     usernameLength.value = minLength.value
   }
-  loadAccounts()
+  loadAccounts(1)
   startAutoRefresh()
 })
 
@@ -772,9 +829,9 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 14px;
-  padding: 14px;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  padding: 16px;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -791,12 +848,12 @@ onBeforeUnmount(() => {
 .history-panel {
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 14px;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
 }
 
 .drawer-history {
@@ -810,7 +867,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 14px 10px;
+  padding: 16px 16px 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
@@ -827,21 +884,23 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-secondary);
   background: var(--el-fill-color-light);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 3px 10px;
 }
 
-.history-scroll {
+.history-list {
   flex: 1;
   min-height: 0;
-  padding: 8px;
+  overflow: auto;
+  padding: 10px;
 }
 
 .history-item {
-  padding: 12px;
-  border-radius: 10px;
+  padding: 12px 12px;
+  border-radius: 12px;
   cursor: pointer;
-  margin-bottom: 6px;
-  transition: background 0.15s ease;
+  margin-bottom: 8px;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
 
   &:hover {
     background: var(--el-fill-color-light);
@@ -849,7 +908,7 @@ onBeforeUnmount(() => {
 
   &.active {
     background: var(--el-color-primary-light-9);
-    box-shadow: inset 0 0 0 1px var(--el-color-primary-light-5);
+    border-color: var(--el-color-primary-light-5);
   }
 }
 
@@ -867,15 +926,16 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-secondary);
 }
 
-.history-skeleton {
-  padding: 12px;
-}
+.history-pagination {
+  padding: 10px 8px 14px;
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid var(--el-border-color-lighter);
 
-.history-end {
-  text-align: center;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  padding: 10px 0 16px;
+  :deep(.el-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 }
 
 .main-panel {
@@ -883,7 +943,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   overflow: auto;
 }
 
@@ -891,9 +951,9 @@ onBeforeUnmount(() => {
 .inbox-card {
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
 }
 
 .card-title {
@@ -902,13 +962,14 @@ onBeforeUnmount(() => {
   gap: 8px;
   font-size: 16px;
   font-weight: 700;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .generate-grid {
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 16px;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 20px;
+  align-items: start;
 
   @media (max-width: 1100px) {
     grid-template-columns: 1fr;
@@ -922,43 +983,106 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 600;
   color: var(--el-text-color-regular);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .current-email-display {
-  border: 1px solid var(--el-color-primary-light-5);
+  border: 1.5px solid var(--el-color-primary-light-5);
   background: linear-gradient(180deg, var(--el-color-primary-light-9), var(--el-bg-color));
-  border-radius: 12px;
-  padding: 18px 14px;
+  border-radius: 14px;
+  padding: 20px 16px;
   text-align: center;
   font-size: 18px;
   font-weight: 700;
   color: var(--el-color-primary);
   word-break: break-all;
-  min-height: 64px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.action-row {
+.action-row,
+.gen-btn-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 12px;
+  margin-top: 14px;
+}
 
-  .el-button {
-    width: 100%;
-    margin: 0;
+/* 饱满圆润大按钮 */
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all 0.15s ease;
+  width: 100%;
+  user-select: none;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  &.primary {
+    background: var(--el-color-primary);
+    border-color: var(--el-color-primary);
+    color: #fff;
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.05);
+    }
+  }
+
+  &.outline {
+    background: var(--el-bg-color);
+    border-color: var(--el-color-primary-light-5);
+    color: var(--el-text-color-primary);
+
+    &:hover:not(:disabled) {
+      border-color: var(--el-color-primary);
+      color: var(--el-color-primary);
+      background: var(--el-color-primary-light-9);
+    }
+  }
+
+  &.ghost {
+    margin-top: 12px;
+    min-height: 44px;
+    border-style: dashed;
+    border-color: var(--el-border-color);
+    background: transparent;
+    color: var(--el-text-color-regular);
+
+    &:hover:not(:disabled) {
+      border-color: var(--el-color-primary-light-3);
+      color: var(--el-color-primary);
+      background: var(--el-color-primary-light-9);
+    }
   }
 }
 
-.copy-btn {
-  border-color: var(--el-color-primary-light-5);
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .config-field {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .field-label {
@@ -967,48 +1091,41 @@ onBeforeUnmount(() => {
   gap: 6px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .length-badge {
   margin-left: auto;
   background: var(--el-fill-color);
-  border-radius: 8px;
-  padding: 2px 8px;
+  border-radius: 999px;
+  padding: 3px 10px;
   color: var(--el-text-color-regular);
+  font-weight: 600;
 }
 
 .suffix-select {
   width: 100%;
-}
 
-.gen-btn-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 4px;
-
-  .el-button {
-    width: 100%;
-    margin: 0;
+  :deep(.el-select__wrapper) {
+    min-height: 44px;
+    border-radius: 12px;
   }
 }
 
-.switch-mode-btn {
-  width: 100%;
-  margin-top: 10px;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 8px;
-}
-
 .custom-row {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+
+  :deep(.el-input__wrapper) {
+    min-height: 44px;
+    border-radius: 12px;
+  }
 
   :deep(.el-input-group__append) {
     max-width: 45%;
     overflow: hidden;
     text-overflow: ellipsis;
     background: var(--el-fill-color-light);
+    border-radius: 0 12px 12px 0;
   }
 }
 
@@ -1028,7 +1145,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 
   .card-title {
     margin-bottom: 0;
@@ -1043,7 +1160,7 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-secondary);
   background: var(--el-fill-color-light);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 5px 12px;
 }
 
 .inbox-list {
@@ -1054,15 +1171,15 @@ onBeforeUnmount(() => {
 
 .email-item {
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 14px;
+  padding: 14px 16px;
   margin-bottom: 10px;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 
   &:hover {
     border-color: var(--el-color-primary-light-5);
-    box-shadow: 0 2px 10px rgba(64, 158, 255, 0.08);
+    box-shadow: 0 4px 14px rgba(64, 158, 255, 0.1);
   }
 
   &.unread {
@@ -1099,10 +1216,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.sender {
-  font-weight: 600;
-}
-
+.sender,
 .subject {
   font-weight: 600;
 }
@@ -1140,5 +1254,134 @@ onBeforeUnmount(() => {
   opacity: 0;
   pointer-events: none;
   position: fixed;
+}
+
+/* 详情浮层 */
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.detail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  min-width: 0;
+  flex: 1;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.detail-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-regular);
+  flex-shrink: 0;
+
+  &:hover {
+    background: var(--el-fill-color-light);
+  }
+}
+
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.code-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+
+  .code-value {
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.5px;
+  }
+
+  .code-tip {
+    color: #67a36c;
+    font-size: 13px;
+  }
+
+  &:hover {
+    filter: brightness(0.98);
+  }
+}
+
+.detail-meta {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+
+  .meta-k {
+    display: inline-block;
+    width: 56px;
+    color: var(--el-text-color-secondary);
+  }
+}
+
+.detail-content-scroll {
+  max-height: min(58vh, 560px);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--el-fill-color-blank);
+}
+
+.detail-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.detail-html {
+  min-height: 120px;
+}
+</style>
+
+<style lang="scss">
+/* dialog 挂到 body，需要非 scoped */
+.email-detail-dialog.el-dialog {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.email-detail-dialog .el-dialog__header {
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.email-detail-dialog .el-dialog__body {
+  padding: 14px 16px 18px;
 }
 </style>
