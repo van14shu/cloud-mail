@@ -197,9 +197,19 @@
                 </div>
                 <div class="email-row">
                   <span class="meta-label">{{ $t('subject') }}</span>
-                  <span class="meta-value subject">
-                    <span v-if="item.code" class="code-tag">[{{ $t('codeLabel') }}{{ item.code }}]</span>
-                    {{ item.subject || '​' }}
+                  <span class="meta-value subject" :class="{ 'has-code': item.resolvedCode }">
+                    <button
+                        v-if="item.resolvedCode"
+                        type="button"
+                        class="code-chip"
+                        :title="$t('clickToCopy')"
+                        @click.stop="copyVerificationCode(item.resolvedCode)"
+                    >
+                      <Icon icon="mdi:key-variant" width="14" height="14"/>
+                      <span class="code-chip-value">{{ item.resolvedCode }}</span>
+                      <Icon icon="solar:copy-bold-duotone" width="14" height="14" class="code-chip-copy"/>
+                    </button>
+                    <span class="subject-text">{{ item.subject || '​' }}</span>
                   </span>
                 </div>
                 <div class="email-row content-row">
@@ -293,9 +303,16 @@
       </template>
 
       <div class="detail-body" v-if="detailEmail">
-        <div v-if="detailEmail.code" class="code-banner" @click="copyText(detailEmail.code)">
+        <div
+            v-if="detailResolvedCode"
+            class="code-banner"
+            role="button"
+            tabindex="0"
+            @click="copyVerificationCode(detailResolvedCode)"
+            @keydown.enter.prevent="copyVerificationCode(detailResolvedCode)"
+        >
           <Icon icon="mdi:key-variant" width="18" height="18" color="#e6a23c"/>
-          <span class="code-value">{{ detailEmail.code }}</span>
+          <span class="code-value">{{ detailResolvedCode }}</span>
           <span class="code-tip">{{ $t('clickToCopy') }}</span>
         </div>
 
@@ -330,6 +347,7 @@ import {generateNameLocalPart, generateRandomLocalPart} from '@/utils/email-gen.
 import {formatDetailDate, fromNow, tzDayjs} from '@/utils/day.js'
 import {sleep} from '@/utils/time-utils.js'
 import {toOssDomain} from '@/utils/convert.js'
+import {resolveVerificationCode} from '@/utils/verify-code.js'
 import ShadowHtml from '@/components/shadow-html/index.vue'
 
 defineOptions({name: 'temp-mail'})
@@ -383,6 +401,7 @@ const detailVisible = ref(false)
 const detailEmail = ref(null)
 
 const currentEmail = computed(() => currentAccount.value?.email || '')
+const detailResolvedCode = computed(() => resolveVerificationCode(detailEmail.value))
 const historyTotalPages = computed(() => Math.max(1, Math.ceil(accountTotal.value / pageSize)))
 const autoRefreshEnabled = computed(() => Number(settingStore.settings.autoRefresh) > 1)
 const canGenerate = computed(() => {
@@ -556,6 +575,14 @@ async function copyCurrentEmail() {
   await copyText(currentEmail.value)
 }
 
+/** 列表/详情共用：复制验证码（调用方需自行 stop 冒泡） */
+async function copyVerificationCode(code) {
+  if (!code) {
+    return
+  }
+  await copyText(code)
+}
+
 function buildLocalPart(type) {
   if (type === 'custom') {
     return (customPrefix.value || '').trim()
@@ -717,11 +744,15 @@ function previewText(email) {
 }
 
 function formatEmailItem(email) {
-  return {
+  const formatText = previewText(email)
+  const item = {
     ...email,
     formatCreateTime: fromNow(email.createTime),
-    formatText: previewText(email)
+    formatText
   }
+  // 列表展示与一键复制：后端 code 优先，主题/正文规则兜底
+  item.resolvedCode = resolveVerificationCode(item)
+  return item
 }
 
 async function loadEmails(reset = false) {
@@ -1522,6 +1553,20 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+.subject.has-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.subject-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 .content {
   color: var(--el-text-color-secondary);
   font-weight: 400;
@@ -1535,10 +1580,55 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
-.code-tag {
+/* 列表内可点验证码芯片：点击只复制，不打开详情 */
+.code-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  max-width: 160px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--el-color-danger-light-5, #f9a7a7);
+  border-radius: 8px;
+  background: var(--el-color-danger-light-9, #fef0f0);
   color: var(--el-color-danger);
-  margin-right: 4px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+
+  .code-chip-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .code-chip-copy {
+    flex-shrink: 0;
+    opacity: 0.75;
+  }
+
+  &:hover {
+    background: var(--el-color-danger-light-8, #fde2e2);
+    border-color: var(--el-color-danger-light-3, #f56c6c);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--el-color-danger) 18%, transparent);
+  }
+
+  &:active {
+    filter: brightness(0.97);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--el-color-danger);
+    outline-offset: 1px;
+  }
 }
 
 .load-more {
@@ -1707,6 +1797,7 @@ onBeforeUnmount(() => {
   .email-item,
   .detail-close,
   .code-banner,
+  .code-chip,
   .mobile-history-toggle {
     transition: none;
   }
