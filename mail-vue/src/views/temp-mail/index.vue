@@ -171,14 +171,10 @@
         <!-- 收件箱 -->
         <div class="inbox-card">
           <div class="inbox-header">
-            <div class="card-title">
-              <Icon icon="solar:inbox-bold-duotone" width="22" height="22" color="#409eff"/>
-              <span>{{ $t('inbox') }}</span>
-            </div>
-            <div class="inbox-header-actions">
-              <div class="refresh-countdown" v-if="autoRefreshEnabled && currentAccount?.accountId">
-                <Icon icon="mdi:timer-outline" width="16" height="16"/>
-                <span>{{ $t('refreshIn', { sec: countdown }) }}</span>
+            <div class="inbox-title-row">
+              <div class="card-title">
+                <Icon icon="solar:inbox-bold-duotone" width="22" height="22" color="#409eff"/>
+                <span>{{ $t('inbox') }}</span>
               </div>
               <button
                   class="inbox-refresh-btn"
@@ -189,6 +185,10 @@
                 <Icon icon="ion:reload" width="16" height="16" :class="{ spinning: emailRefreshing }"/>
                 <span>{{ $t('refreshMail') }}</span>
               </button>
+            </div>
+            <div class="refresh-countdown" v-if="autoRefreshEnabled && currentAccount?.accountId">
+              <Icon icon="mdi:timer-outline" width="16" height="16"/>
+              <span>{{ $t('refreshIn', { sec: countdown }) }}</span>
             </div>
           </div>
 
@@ -1511,13 +1511,13 @@ onBeforeUnmount(() => {
   }
 }
 
-.inbox-header-actions {
+/* 标题与刷新按钮紧贴排列，倒计时仍靠右 */
+.inbox-title-row {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  gap: 10px;
+  min-width: 0;
   flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .refresh-countdown {
