@@ -175,9 +175,20 @@
               <Icon icon="solar:inbox-bold-duotone" width="22" height="22" color="#409eff"/>
               <span>{{ $t('inbox') }}</span>
             </div>
-            <div class="refresh-countdown" v-if="autoRefreshEnabled && currentAccount?.accountId">
-              <Icon icon="mdi:timer-outline" width="16" height="16"/>
-              <span>{{ $t('refreshIn', { sec: countdown }) }}</span>
+            <div class="inbox-header-actions">
+              <div class="refresh-countdown" v-if="autoRefreshEnabled && currentAccount?.accountId">
+                <Icon icon="mdi:timer-outline" width="16" height="16"/>
+                <span>{{ $t('refreshIn', { sec: countdown }) }}</span>
+              </div>
+              <button
+                  class="inbox-refresh-btn"
+                  type="button"
+                  :disabled="!currentAccount?.accountId || emailRefreshing"
+                  @click="refreshEmails"
+              >
+                <Icon icon="ion:reload" width="16" height="16" :class="{ spinning: emailRefreshing }"/>
+                <span>{{ $t('refreshMail') }}</span>
+              </button>
             </div>
           </div>
 
@@ -575,6 +586,24 @@ async function copyCurrentEmail() {
   await copyText(currentEmail.value)
 }
 
+/**
+ * 随机生成 / 随机人名成功后自动复制邮箱。
+ * 复制成功时提示复制成功；失败时退回添加成功提示。
+ */
+async function autoCopyGeneratedEmail(email) {
+  if (!email) {
+    ElMessage({message: t('addSuccessMsg'), type: 'success', plain: true})
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(email)
+    ElMessage({message: t('copySuccessMsg'), type: 'success', plain: true})
+  } catch (e) {
+    console.error(e)
+    ElMessage({message: t('addSuccessMsg'), type: 'success', plain: true})
+  }
+}
+
 /** 列表/详情共用：复制验证码（调用方需自行 stop 冒泡） */
 async function copyVerificationCode(code) {
   if (!code) {
@@ -685,8 +714,11 @@ async function generateAndAdd(type, retryCount = 0) {
     await prependAccount(account)
     if (type === 'custom') {
       customPrefix.value = ''
+      ElMessage({message: t('addSuccessMsg'), type: 'success', plain: true})
+    } else {
+      // 随机生成 / 随机人名：生成成功后自动复制邮箱
+      await autoCopyGeneratedEmail(account.email)
     }
-    ElMessage({message: t('addSuccessMsg'), type: 'success', plain: true})
     userStore.refreshUserInfo?.()
   } catch (res) {
     if (res?.code === 400) {
@@ -1239,18 +1271,27 @@ onBeforeUnmount(() => {
 .generate-grid {
   display: grid;
   grid-template-columns: 1.15fr 1fr;
-  gap: 20px;
-  align-items: start;
+  gap: 16px;
+  align-items: stretch;
 
   @media (max-width: 1100px) {
     grid-template-columns: 1fr;
-    gap: 18px;
+    gap: 14px;
   }
 }
 
+/* 当前邮箱 / 邮箱配置：统一卡片样式，等高拉伸消除左侧大块留白 */
 .current-box,
 .config-box {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 14px;
+  background: var(--el-fill-color-blank, var(--el-bg-color));
+  box-sizing: border-box;
 }
 
 .section-label {
@@ -1262,19 +1303,21 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-regular);
   margin-bottom: 12px;
   line-height: 1.3;
+  flex-shrink: 0;
 }
 
 .current-email-display {
   border: 1.5px solid var(--el-color-primary-light-5);
   background: linear-gradient(165deg, var(--el-color-primary-light-9) 0%, var(--el-bg-color) 100%);
   border-radius: 14px;
-  padding: 18px 16px;
+  padding: 20px 16px;
   text-align: center;
   font-size: clamp(15px, 2.2vw, 18px);
   font-weight: 700;
   color: var(--el-color-primary);
   word-break: break-all;
-  min-height: 72px;
+  min-height: 96px;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1282,7 +1325,18 @@ onBeforeUnmount(() => {
   letter-spacing: 0.01em;
 }
 
-.action-row,
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+  flex-shrink: 0;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
 .gen-btn-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1457,6 +1511,15 @@ onBeforeUnmount(() => {
   }
 }
 
+.inbox-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .refresh-countdown {
   display: inline-flex;
   align-items: center;
@@ -1470,6 +1533,43 @@ onBeforeUnmount(() => {
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+/* 收件箱标题旁的紧凑刷新按钮，功能与「当前邮箱」区刷新一致 */
+.inbox-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--el-color-primary-light-5);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  touch-action: manipulation;
+  line-height: 1.2;
+  user-select: none;
+
+  &:hover:not(:disabled) {
+    border-color: var(--el-color-primary);
+    color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--el-color-primary);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .inbox-list {
@@ -1794,6 +1894,7 @@ onBeforeUnmount(() => {
   .history-item,
   .page-nav,
   .pill-btn,
+  .inbox-refresh-btn,
   .email-item,
   .detail-close,
   .code-banner,
