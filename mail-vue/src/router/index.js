@@ -22,6 +22,17 @@ const routes = [
                 }
             },
             {
+                path: '/temp-mail',
+                name: 'temp-mail',
+                component: () => import('@/views/temp-mail/index.vue'),
+                meta: {
+                    title: 'tempMail',
+                    name: 'temp-mail',
+                    menu: true,
+                    hideAccountPanel: true
+                }
+            },
+            {
                 path: '/message',
                 name: 'content',
                 component: () => import('@/views/content/index.vue'),
@@ -159,7 +170,9 @@ router.afterEach((to) => {
 
     const uiStore = useUiStore()
     if (to.meta.menu) {
-        if (['content', 'email', 'send'].includes(to.meta.name)) {
+        if (to.meta.hideAccountPanel) {
+            uiStore.accountShow = false
+        } else if (['content', 'email', 'send'].includes(to.meta.name)) {
             uiStore.accountShow = window.innerWidth > 767;
         } else {
             uiStore.accountShow = false

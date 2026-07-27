@@ -336,6 +336,27 @@ const zh = {
     searchUser: '搜索用户',
     searchEmail: '搜索邮箱',
     searchSender: '搜索发件人',
-    userEmail: '用户邮箱'
+    userEmail: '用户邮箱',
+    tempMail: '临时邮箱',
+    historyMailbox: '历史邮箱',
+    mailboxUnit: '邮箱',
+    generateTempMail: '生成临时邮箱',
+    currentMailbox: '当前邮箱',
+    noCurrentMailbox: '请选择或生成邮箱',
+    mailboxConfig: '邮箱配置',
+    emailSuffix: '邮箱后缀',
+    usernameLength: '用户名长度',
+    randomGenerate: '随机生成',
+    randomName: '随机人名',
+    switchCustom: '切换自定义',
+    switchRandom: '切换随机',
+    copyMailbox: '复制邮箱',
+    refreshMail: '刷新邮件',
+    refreshIn: '{sec}s 后刷新',
+    noMailboxYet: '暂无邮箱',
+    selectDomainFirst: '请先选择邮箱后缀',
+    addAccountDisabled: '当前不允许添加邮箱',
+    content: '内容',
+    loadMore: '加载更多'
 }
 export default zh

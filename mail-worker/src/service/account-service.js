@@ -5,7 +5,7 @@ import userService from './user-service';
 import emailService from './email-service';
 import orm from '../entity/orm';
 import account from '../entity/account';
-import { and, asc, eq, gt, inArray, count, sql, ne, or, lt, desc } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, count, sql, ne, or, lt, desc, max } from 'drizzle-orm';
 import {accountConst, isDel, settingConst} from '../const/entity-const';
 import settingService from './setting-service';
 import turnstileService from './turnstile-service';
@@ -88,7 +88,18 @@ const accountService = {
 		}
 
 
-		accountRow = await orm(c).insert(account).values({ email: email, userId: userId, name: emailUtils.getName(email) }).returning().get();
+		const maxSortRow = await orm(c)
+			.select({ maxSort: max(account.sort) })
+			.from(account)
+			.where(and(eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
+			.get();
+
+		accountRow = await orm(c).insert(account).values({
+			email: email,
+			userId: userId,
+			name: emailUtils.getName(email),
+			sort: (maxSortRow?.maxSort || 0) + 1
+		}).returning().get();
 
 		if (addEmailVerify === settingConst.addEmailVerify.COUNT && !addVerifyOpen) {
 			const row = await verifyRecordService.increaseAddCount(c);

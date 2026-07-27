@@ -336,7 +336,28 @@ const en = {
     searchUser: 'Search by user',
     searchEmail: 'Search by Email',
     searchSender: 'Search by Sender',
-    userEmail: 'Email Address'
+    userEmail: 'Email Address',
+    tempMail: 'Temp Mail',
+    historyMailbox: 'History',
+    mailboxUnit: 'mailboxes',
+    generateTempMail: 'Generate Temporary Email',
+    currentMailbox: 'Current Email',
+    noCurrentMailbox: 'Select or generate an email',
+    mailboxConfig: 'Mailbox Settings',
+    emailSuffix: 'Domain',
+    usernameLength: 'Username length',
+    randomGenerate: 'Random',
+    randomName: 'Random Name',
+    switchCustom: 'Custom mode',
+    switchRandom: 'Random mode',
+    copyMailbox: 'Copy Email',
+    refreshMail: 'Refresh Mail',
+    refreshIn: 'Refresh in {sec}s',
+    noMailboxYet: 'No mailboxes yet',
+    selectDomainFirst: 'Please select a domain first',
+    addAccountDisabled: 'Adding mailboxes is currently disabled',
+    content: 'Content',
+    loadMore: 'Load more'
 }
 
 export default en

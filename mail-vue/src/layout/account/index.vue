@@ -484,7 +484,8 @@ function submit() {
     addLoading.value = false
     showAdd.value = false
     addForm.email = ''
-    accounts.push(account)
+    // 新邮箱置顶展示（后端 sort 递增，前端 unshift 对齐）
+    accounts.unshift(account)
     verifyToken = ''
     settingStore.settings.addVerifyOpen = account.addVerifyOpen
     ElMessage({
