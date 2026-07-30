@@ -8,6 +8,7 @@ const MIN_CODE_LENGTH = 3
 
 /** 带明确标签的验证码模式（优先；捕获段不含空格，避免吞掉后续英文单词） */
 const LABELED_CODE_PATTERNS = [
+	/Enter\s+this\s+temporary\s+verification\s+code\s+to\s+continue\s*[:：=\-–—]?\s*([A-Za-z0-9][A-Za-z0-9\-]{2,14})/i,
 	/(?:confirmation\s*code|verification\s*code|verify(?:ing)?\s*code|security\s*code|one[-\s]?time\s*(?:code|password|pwd|passcode)|otp(?:\s*code)?|auth(?:entication)?\s*code|access\s*code|pin\s*code|pass\s*code|登录码|校验码|动态码|激活码|验证码)\s*[:：=\-–—]?\s*([A-Za-z0-9][A-Za-z0-9\-]{2,14})/i,
 	/\b(?:code|码)\s*[:：=\-–—]\s*([A-Za-z0-9][A-Za-z0-9\-]{2,14})\b/i,
 	// 空格分隔的数字 OTP：验证码 12 34 56
